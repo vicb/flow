@@ -218,6 +218,7 @@ public class MessageSender {
      */
     public void resynchronize() {
         Console.log("Resynchronizing from server");
+        registry.getMessageHandler().onResynchronize();
         JsonObject resyncParam = Json.createObject();
         resyncParam.put(ApplicationConstants.RESYNCHRONIZE_ID, true);
         send(Json.createArray(), resyncParam);
