@@ -174,11 +174,8 @@ class VaadinDevmodeGizmo extends LitElement {
 
   openDedicatedWebSocketConnection() {
     const url = this.serviceurl ? this.serviceurl : window.location.toString();
-    if (!url.startsWith('http://')) {
-      console.warn('The protocol of the url should be http for live reload to work.');
-      return;
-    }
-    const wsUrl = url.replace(/^http:/, 'ws:') + '?refresh_connection';
+    const wsUrl = url.replace(/^http:/, 'ws:')
+      .replace(/^https:/, 'wss:') + '?refresh_connection';
     const self = this;
     this.connection = new WebSocket(wsUrl);
     this.connection.onmessage = msg => this.handleMessage(msg);
