@@ -13,6 +13,7 @@ import {
 } from "./Validation";
 
 import {FieldStrategy, getDefaultFieldStrategy} from "./Field";
+import { FormSubmitter } from "./FormSubmitter";
 
 const _submitting = Symbol('submitting');
 const _defaultValue = Symbol('defaultValue');
@@ -20,6 +21,7 @@ const _value = Symbol('value');
 const _emptyValue = Symbol('emptyValue');
 const _onChange = Symbol('onChange');
 const _onSubmit = Symbol('onSubmit');
+const _submitter = Symbol('submitter');
 const _validations = Symbol('validations');
 const _validating = Symbol('validating');
 const _validationRequestSymbol = Symbol('validationRequest');
@@ -41,6 +43,7 @@ export class Binder<T, M extends AbstractModel<T>> extends BinderNode<T, M> {
   private [_validationRequestSymbol]: Promise<void> | undefined = undefined;
   private [_onChange]: (oldValue?: T) => void;
   private [_onSubmit]: (value: T) => Promise<T|void>;
+  private [_submitter]: FormSubmitter<T>;
 
   private [_validations]: Map<AbstractModel<any>, Map<Validator<any>, Promise<ReadonlyArray<ValueError<any>>>>> = new Map();
 
@@ -71,6 +74,7 @@ export class Binder<T, M extends AbstractModel<T>> extends BinderNode<T, M> {
     }
     this[_onChange] = config?.onChange || this[_onChange];
     this[_onSubmit] = config?.onSubmit || this[_onSubmit];
+    this[_submitter] = config?.submitter || this[_submitter]
     this.read(this[_emptyValue]);
   }
 
@@ -145,9 +149,30 @@ export class Binder<T, M extends AbstractModel<T>> extends BinderNode<T, M> {
    * 
    * It's a no-op if the onSubmit callback is undefined.
    */
-  async submit(): Promise<T|void>{
-    if(this[_onSubmit]!==undefined){
+  async submit(): Promise<T | void> {
+    if (this[_onSubmit] !== undefined) {
       this.submitTo(this[_onSubmit]);
+    }
+    if (this[_submitter] !== undefined) {
+      try {
+        return await this[_submitter].submit(this.value);
+      } catch (error) {
+        if (error.validationErrorData && error.validationErrorData.length) {
+          const valueErrors: Array<ValueError<any>> = [];
+          error.validationErrorData.forEach((data: any) => {
+            const res = /Object of type '(.+)' has invalid property '(.+)' with value '(.+)', validation error: '(.+)'/.exec(data.message);
+            const [property, value, message] = res ? res.splice(2) : [data.parameterName, undefined, data.message];
+            valueErrors.push({ property, value, validator: new ServerValidator(message), message });
+          });
+          this.setErrorsWithDescendants(valueErrors);
+          error = new ValidationError(valueErrors);
+        }
+        throw (error);
+      } finally {
+        this[_submitting] = false;
+        this.defaultValue = this.value;
+        this.update(this.value);
+      }
     }
   }
 
@@ -266,4 +291,5 @@ export class Binder<T, M extends AbstractModel<T>> extends BinderNode<T, M> {
 export interface BinderConfiguration<T>{
   onChange?: (oldValue?: T) => void,
   onSubmit?: (value: T) => Promise<T|void>
+  submitter?: FormSubmitter<T>;
 }
